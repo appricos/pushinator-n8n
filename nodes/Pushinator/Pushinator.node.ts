@@ -1,6 +1,6 @@
-import type { IExecuteFunctions, ILoadOptionsFunctions, INodePropertyOptions } from 'n8n-workflow';
+import type { IExecuteFunctions, ILoadOptionsFunctions, INodePropertyOptions, JsonObject, IHttpRequestOptions } from 'n8n-workflow';
 
-import { INodeExecutionData, INodeType, INodeTypeDescription } from 'n8n-workflow';
+import { INodeExecutionData, INodeType, INodeTypeDescription, NodeApiError } from 'n8n-workflow';
 
 export class Pushinator implements INodeType {
 	description: INodeTypeDescription = {
@@ -55,49 +55,54 @@ export class Pushinator implements INodeType {
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-		const credentials = await this.getCredentials('pushinatorApi');
-
 		const notification = this.getNodeParameter('notification', 0) as string;
 		const channel_id = this.getNodeParameter('channel_id', 0) as string;
 
-		const response = await this.helpers.request({
-			method: 'POST',
-			url: 'https://api.pushinator.com/api/v2/notifications/send',
-			headers: {
-				Authorization: `Bearer ${credentials.apiKey}`,
-				'User-Agent': 'pushinator-n8n/1.0',
-			},
-			body: {
-				channel_id: channel_id,
-				content: notification,
-			},
-			json: true,
-		});
+		try {
+			const options: IHttpRequestOptions = {
+				method: 'POST',
+				url: 'https://api.pushinator.com/api/v2/notifications/send',
+				headers: {
+					'User-Agent': 'pushinator-n8n/1.0',
+				},
+				body: {
+					channel_id: channel_id,
+					content: notification,
+				},
+				json: true,
+			};
 
-		return [this.helpers.returnJsonArray(response)];
+			const response = await this.helpers.httpRequestWithAuthentication.call(this, 'pushinatorApi', options);
+			return [this.helpers.returnJsonArray(response)];
+		} catch (error) {
+			throw new NodeApiError(this.getNode(), error as JsonObject);
+		}
 	}
-
 
 	methods = {
 		loadOptions: {
 			async fetchChannels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				const credentials = await this.getCredentials('pushinatorApi');
+				try {
+					const options: IHttpRequestOptions = {
+						url: 'https://api.pushinator.com/api/v2/channels',
+						method: 'GET',
+						json: true,
+						headers: {
+							'Content-Type': 'application/json',
+							'User-Agent': 'pushinator-n8n/1.0',
+						},
+					};
 
-				const response = await this.helpers.request({
-					url: 'https://api.pushinator.com/api/v2/channels',
-					method: 'GET',
-					json: true,
-					headers: {
-						'Content-Type': 'application/json',
-						'User-Agent': 'pushinator-n8n/1.0',
-						'Authorization': `Bearer ${credentials.apiKey}`
-					},
-				});
+					const response = await this.helpers.httpRequestWithAuthentication.call(this, 'pushinatorApi', options);
 
-				return response.data.map((channel: any) => ({
-					name: channel.name,
-					value: channel.id,
-				}));
+					return response.data.map((channel: any) => ({
+						name: channel.name,
+						value: channel.id,
+					}));
+				} catch(error) {
+					throw new NodeApiError(this.getNode(), error as JsonObject);
+				}
+
 			}
 		}
 	}
