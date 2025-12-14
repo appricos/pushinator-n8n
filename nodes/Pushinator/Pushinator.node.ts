@@ -75,6 +75,14 @@ export class Pushinator implements INodeType {
 			const response = await this.helpers.httpRequestWithAuthentication.call(this, 'pushinatorApi', options);
 			return [this.helpers.returnJsonArray(response)];
 		} catch (error) {
+			if (this.continueOnFail()) {
+				return [
+					this.helpers.returnJsonArray({
+						error: (error as Error).message,
+					}),
+				];
+			}
+
 			throw new NodeApiError(this.getNode(), error as JsonObject);
 		}
 	}
